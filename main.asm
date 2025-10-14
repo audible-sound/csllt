@@ -16,3 +16,12 @@ section .bss
 
 section .text
     global _start
+
+_start:
+menu_loop:
+    ; Print menu
+    mov eax, 4          ; sys_write
+    mov ebx, 1          ; stdout
+    mov ecx, menu
+    mov edx, menu_end - menu
+    int 0x80
