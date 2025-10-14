@@ -1,5 +1,5 @@
 section .data
-    menu db 10, "==========================",10
+    menu db "==========================",10
          db "   CONTACT MANAGER MENU   ",10
          db "==========================",10
          db "1. Add Contact",10
@@ -8,8 +8,10 @@ section .data
          db "4. Delete Contact",10
          db "5. Exit",10
          db "Enter choice: ",0
-
+         
+    menu_len equ $ - menu
     invalid_choice_msg db "Invalid choice. Try again.",10,0
+
 
 section .bss
     input resb 4      ; Reserve 4 bytes (2 bytes for input, the remaining just to be safe)
@@ -23,8 +25,5 @@ menu_loop:
     mov eax, 4          ; sys_write
     mov ebx, 1          ; stdout
     mov ecx, menu
-    mov edx, menu_end - menu
+    mov edx, menu_len
     int 0x80
-
-menu_end:
-invalid_choice_msg_end:
