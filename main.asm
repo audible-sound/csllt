@@ -12,7 +12,7 @@ section .data
     invalid_choice_msg db "Invalid choice. Try again.",10,0
 
 section .bss
-    input resb 4      ; Reserve 4 bytes for input buffer
+    input resb 4      ; Reserve 4 bytes (2 bytes for input, the remaining just to be safe)
 
 section .text
     global _start
