@@ -25,3 +25,6 @@ menu_loop:
     mov ecx, menu
     mov edx, menu_end - menu
     int 0x80
+
+menu_end:
+invalid_choice_msg_end:
