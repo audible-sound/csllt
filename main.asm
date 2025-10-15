@@ -22,10 +22,17 @@ section .data
     prompt_number db "Enter Contact Number (max 12 characters): ",0
     prompt_number_len equ $ - prompt_number
 
+    err_file_open_msg db "Error opening file",10,0
+    err_file_open_len equ $ - err_file_open_msg
+
+    filename db "contacts.csv", 0
+    file_buffer_size equ 4096 ; 4KB
+
 section .bss
     input resb 4      ; Reserve 4 bytes (2 bytes for input, the remaining just to be safe)
     contacts resb 320 ; Reserve 320 bytes (32 bytes (20 for name and 12 for phone number) * 10 contacts)
     contact_count resd 1     ; Reserve 4 bytes to track the number of contacts
+    file_buffer resb file_buffer_size; Files will be read at 4KB blocks
 
 section .text
     global _start
@@ -50,6 +57,12 @@ menu_loop:
     mov al, [input]
     cmp al, '1'
     je add_contact
+    cmp al, '2'
+    je view_contact
+    cmp al '3'
+    je edit_contact
+    cmp al '4'
+    je delete_contact
     cmp al, '5'
     je exit_program
 
@@ -119,6 +132,18 @@ add_contact:
     mov edx, new_line_len
     int 0x80
     jmp menu_loop
+
+view_contact:
+    mov eax, 5           ; Call sys_open
+    mov ebx, filename
+    mov ecx, 0           ; Open file with read only access
+    int 0x80
+
+edit_contact:
+    int 0x80
+
+delete_contact:
+    int 0x80
 
 exit_program:
     mov eax, 1          ; call sys_exit
