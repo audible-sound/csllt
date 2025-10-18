@@ -1,16 +1,16 @@
 section .data
-    menu db "==========================",10
-         db "   CONTACT MANAGER MENU   ",10
-         db "==========================",10
-         db "1. Add Contact",10
-         db "2. View Contacts",10
-         db "3. Edit Contact",10
-         db "4. Delete Contact",10
-         db "5. Exit",10
+    menu db "==========================",0xA
+         db "   CONTACT MANAGER MENU   ",0xA
+         db "==========================",0xA
+         db "1. Add Contact",0xA
+         db "2. View Contacts",0xA
+         db "3. Edit Contact",0xA
+         db "4. Delete Contact",0xA
+         db "5. Exit",0xA
          db "Enter choice: ",0
     menu_len equ $ - menu
 
-    invalid_choice_msg db "Invalid choice. Try again.",10,0
+    invalid_choice_msg db "Invalid choice. Try again.",0xA,0
     invalid_choice_msg_len equ $ - invalid_choice_msg
 
     new_line db 0xA 
@@ -22,16 +22,15 @@ section .data
     prompt_number db "Enter Contact Number (max 12 characters): ",0
     prompt_number_len equ $ - prompt_number
 
-    err_file_open_msg db "Error opening file",10,0
+    err_file_open_msg db "Error opening file",0xA,0
     err_file_open_len equ $ - err_file_open_msg
 
     filename db "contacts.csv", 0
     file_buffer_size equ 4096 ; 4KB
 
 section .bss
-    input resb 4      ; Reserve 4 bytes (2 bytes for input, the remaining just to be safe)
+    input resb 2      ; Reserve 4 bytes (2 bytes for input, the remaining just to be safe)
     contacts resb 320 ; Reserve 320 bytes (32 bytes (20 for name and 12 for phone number) * 10 contacts)
-    contact_count resd 1     ; Reserve 4 bytes to track the number of contacts
     file_buffer resb file_buffer_size; Files will be read at 4KB blocks
 
 section .text
@@ -50,19 +49,11 @@ menu_loop:
     mov eax, 3          ; Call sys_read
     mov ebx, 0          ; stdin file descriptor
     mov ecx, input
-    mov edx, 4
+    mov edx, 2
     int 0x80
 
     ; Check input option
     mov al, [input]
-    cmp al, '1'
-    je add_contact
-    cmp al, '2'
-    je view_contact
-    cmp al '3'
-    je edit_contact
-    cmp al '4'
-    je delete_contact
     cmp al, '5'
     je exit_program
 
@@ -74,76 +65,16 @@ menu_loop:
     int 0x80
 
     ; Repeat menu in new line
+    call print_new_line
+    jmp menu_loop
+
+print_new_line:
     mov eax, 4          ; sys_write
     mov ebx, 1          ; stdout
     mov ecx, new_line
     mov edx, new_line_len
     int 0x80
-    jmp menu_loop
-
-add_contact:
-    ; Check space
-    mov eax, [contact_count]
-
-    ; Find free slot to store new contact
-    mov ecx, 32         ; assign 32 bytes for ecx
-    mul ecx
-    mov esi, contacts   ; find where contacts is stored
-    add esi, eax        ; find where the new contact slot
-
-    ; Prompt name
-    mov eax, 4          ; sys_write
-    mov ebx, 1          ; stdout
-    mov ecx, prompt_name
-    mov edx, prompt_name_len
-    int 0x80
-
-    ; Get name input
-    mov eax, 3          ; Call sys_read
-    mov ebx, 0          ; stdin file descriptor
-    mov ecx, esi
-    mov edx, 20         ; max 20 bytes for name
-    int 0x80
-
-    ; Prompt contact
-    mov eax, 4          ; sys_write
-    mov ebx, 1          ; stdout
-    mov ecx, prompt_number
-    mov edx, prompt_number_len
-    int 0x80
-
-    ; Get contact input
-    mov eax, 3          ; Call sys_read
-    mov ebx, 0          ; stdin file descriptor
-    mov ecx, esi
-    add ecx, 20         ; store contact after name
-    mov edx, 12         ; max 12 bytes for contact number
-    int 0x80
-
-    ; Increment contact count
-    mov eax, [contact_count]    ; get contact count
-    inc eax                     ; increment value
-    mov [contact_count], eax    ; save value
-
-    ; Go back to main menu
-    mov eax, 4          ; sys_write
-    mov ebx, 1          ; stdout
-    mov ecx, new_line
-    mov edx, new_line_len
-    int 0x80
-    jmp menu_loop
-
-view_contact:
-    mov eax, 5           ; Call sys_open
-    mov ebx, filename
-    mov ecx, 0           ; Open file with read only access
-    int 0x80
-
-edit_contact:
-    int 0x80
-
-delete_contact:
-    int 0x80
+    ret
 
 exit_program:
     mov eax, 1          ; call sys_exit
