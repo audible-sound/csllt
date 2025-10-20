@@ -1,5 +1,6 @@
 global _start
 global repeat_menu
+global print_new_line
 
 extern add_income
 extern add_expense
@@ -17,7 +18,7 @@ section .data
          db "6. Delete Record",0xA
          db "7. Exit",0xA
          db "Enter choice: ",0
-    menu_len equ $ - menu - 1
+    menu_len equ $ - menu
 
     invalid_choice_msg db "Invalid choice. Try again.",0xA,0
     invalid_choice_msg_len equ $ - invalid_choice_msg - 1
@@ -29,7 +30,7 @@ section .data
     err_file_open_len equ $ - err_file_open_msg - 1
 
 section .bss
-    input resb 2
+    input resb 8
 
 section .text
 _start:
@@ -43,15 +44,17 @@ menu_loop:
 
     ; Read user input
     mov eax, 3          ; Call sys_read
-    mov ebx, 0          ; stdin file descriptor
+    mov ebx, 0          ; stdin 
     mov ecx, input
-    mov edx, 2
+    mov edx, 8
     int 0x80
-
+    
     ; Check input option
     mov al, [input]
     cmp al, '2'
     je add_income
+    cmp al, '3'
+    je add_expense
     cmp al, '4'
     je view_records
     cmp al, '7'
@@ -63,7 +66,6 @@ menu_loop:
     mov ecx, invalid_choice_msg
     mov edx, invalid_choice_msg_len
     int 0x80
-
     jmp repeat_menu
 
 print_new_line:

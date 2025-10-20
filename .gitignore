@@ -9,8 +9,4 @@
 *.bin
 *.img
 
-# Ignore files with no dot (no extension)
-[^.]*
-
-# Don't ignore directories
-!*/
+main

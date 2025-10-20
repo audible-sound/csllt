@@ -17,7 +17,7 @@ The `budget.db` file stores financial records in a fixed-size binary format. Eac
 | 0-3 | 4 bytes | ID | Unique record identifier (32-bit integer) |
 | 4 | 1 byte | Type | Record type: `0` = Income, `1` = Expense |
 | 5-8 | 4 bytes | Amount | Transaction amount (32-bit integer) |
-| 9-63 | 55 bytes | Description | Transaction description (null-terminated string, max 54 chars) |
+| 9-63 | 54 bytes | Description | Transaction description (null-terminated string, max 54 chars) |
 
 ## 🛠️ Build Instructions
 Prerequisites: Linux x86-32 NASM compiler
@@ -31,5 +31,5 @@ nasm -f elf32 add_expense.asm -o add_expense.o
 nasm -f elf32 view_records.asm -o view_records.o
 nasm -f elf32 record_manager.asm -o record_manager.o
 nasm -f elf32 check_balance.asm -o check_balance.o
-ld -m elf_i386 -o main main.o add_income.o record_manager.o view_records.o check_balance.o add_expense.o
+ld -m elf_i386 -o main main.o add_income.o record_manager.o view_records.o add_expense.o
 ```
