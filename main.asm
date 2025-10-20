@@ -1,41 +1,37 @@
+global _start
+global repeat_menu
+
+extern add_income
+extern add_expense
+extern view_records
+
 section .data
-    menu db "==========================",0xA
-         db "   CONTACT MANAGER MENU   ",0xA
-         db "==========================",0xA
-         db "1. Add Contact",0xA
-         db "2. View Contacts",0xA
-         db "3. Edit Contact",0xA
-         db "4. Delete Contact",0xA
-         db "5. Exit",0xA
+    menu db "===========================",0xA
+         db "    BUDGET MANAGER MENU    ",0xA
+         db "===========================",0xA
+         db "1. Check Balance",0xA
+         db "2. Add Income",0xA
+         db "3. Add Expense",0xA
+         db "4. View Records",0xA
+         db "5. Update Record",0xA
+         db "6. Delete Record",0xA
+         db "7. Exit",0xA
          db "Enter choice: ",0
-    menu_len equ $ - menu
+    menu_len equ $ - menu - 1
 
     invalid_choice_msg db "Invalid choice. Try again.",0xA,0
-    invalid_choice_msg_len equ $ - invalid_choice_msg
+    invalid_choice_msg_len equ $ - invalid_choice_msg - 1
 
     new_line db 0xA 
     new_line_len equ $ - new_line
 
-    prompt_name db "Enter Contact Name (max 20 characters): ",0
-    prompt_name_len equ $ - prompt_name
-
-    prompt_number db "Enter Contact Number (max 12 characters): ",0
-    prompt_number_len equ $ - prompt_number
-
     err_file_open_msg db "Error opening file",0xA,0
-    err_file_open_len equ $ - err_file_open_msg
-
-    filename db "contacts.csv", 0
-    file_buffer_size equ 4096 ; 4KB
+    err_file_open_len equ $ - err_file_open_msg - 1
 
 section .bss
-    input resb 2      ; Reserve 4 bytes (2 bytes for input, the remaining just to be safe)
-    contacts resb 320 ; Reserve 320 bytes (32 bytes (20 for name and 12 for phone number) * 10 contacts)
-    file_buffer resb file_buffer_size; Files will be read at 4KB blocks
+    input resb 2
 
 section .text
-    global _start
-
 _start:
 menu_loop:
     ; Print menu
@@ -54,7 +50,11 @@ menu_loop:
 
     ; Check input option
     mov al, [input]
-    cmp al, '5'
+    cmp al, '2'
+    je add_income
+    cmp al, '4'
+    je view_records
+    cmp al, '7'
     je exit_program
 
     ; Manage Invalid Input
@@ -64,9 +64,7 @@ menu_loop:
     mov edx, invalid_choice_msg_len
     int 0x80
 
-    ; Repeat menu in new line
-    call print_new_line
-    jmp menu_loop
+    jmp repeat_menu
 
 print_new_line:
     mov eax, 4          ; sys_write
@@ -75,6 +73,11 @@ print_new_line:
     mov edx, new_line_len
     int 0x80
     ret
+
+repeat_menu:
+    ; Repeat menu in new line
+    call print_new_line
+    jmp menu_loop
 
 exit_program:
     mov eax, 1          ; call sys_exit

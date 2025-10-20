@@ -1,0 +1,16 @@
+# Object files
+*.o
+*.obj
+
+# Executables
+*.out
+*.exe
+*.elf
+*.bin
+*.img
+
+# Ignore files with no dot (no extension)
+[^.]*
+
+# Don't ignore directories
+!*/
