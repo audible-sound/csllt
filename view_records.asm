@@ -24,7 +24,7 @@ view_records:
     call wait_for_input
     call repeat_menu    
         
- wait_for_input:
+wait_for_input:
     mov eax, 4          ; sys_write
     mov ebx, 1          ; stdout
     mov ecx, continue_prompt

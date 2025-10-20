@@ -2,6 +2,7 @@ global _start
 global repeat_menu
 global print_new_line
 
+extern check_balance
 extern add_income
 extern add_expense
 extern view_records
@@ -51,6 +52,8 @@ menu_loop:
     
     ; Check input option
     mov al, [input]
+    cmp al, '1'
+    je check_balance
     cmp al, '2'
     je add_income
     cmp al, '3'

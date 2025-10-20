@@ -1,6 +1,9 @@
 global add_record
 global get_record_count
 global print_records
+global calculate_balance
+global print_amount
+
 extern repeat_menu
 extern print_new_line
 
@@ -13,6 +16,9 @@ section .data
         
     error_open_file db "Error: Could not open file", 0xA, 0
     error_open_file_len equ $ - error_open_file - 1
+
+    error_calc_balance db "Error: Failed to calculate balance", 0xA, 0
+    error_calc_balance_len equ $ - error_open_file - 1
 
     no_records_msg db "No records found in database.", 0xA, 0
     no_records_msg_len equ $ - no_records_msg - 1
@@ -28,7 +34,8 @@ section .data
     expense_str_len equ $ - expense_str - 1
     separator db "|", 0
     space db " ", 0
-    newline db 0xA, 0
+
+    current_balance dd 0
     
 section .bss
     record_buffer resb RECORD_SIZE
@@ -431,7 +438,7 @@ print_separator:
 
 print_amount:
     ; Print amount as dollars with two decimals
-    ; Input: EAX = amount in cents (e.g., 12345 = $123.45)
+    ; Input: eax = amount in cents (e.g., 12345 = $123.45)
     ; Example: 12345 -> "123.45"
     ; Example: 12300 -> "123.00"
     push eax
@@ -525,4 +532,149 @@ print_no_records:
     mov ecx, no_records_msg
     mov edx, no_records_msg_len
     int 0x80
+    ret
+
+calculate_balance:
+    ; Calculate total balance from all records
+    ; eax will return the balance
+    push ebx
+    push ecx
+    push edx
+    push esi
+    push edi
+    
+    ; Initialize balance to 0
+    xor eax, eax        
+    mov [current_balance], eax
+    
+    ; Open file for reading
+    mov eax, 5          ; sys_open
+    mov ebx, filename
+    mov ecx, 0          ; read only access
+    int 0x80
+    
+    cmp eax, 0
+    jl calc_balance_error
+    mov [file_handle], eax
+    
+    ; Get file size to check if there are records
+    mov eax, 19         ; sys_lseek
+    mov ebx, [file_handle]
+    mov ecx, 0          ; offset from start
+    mov edx, 2          ; Go to end of file
+    int 0x80
+    
+    cmp eax, 0
+    je calc_balance_done    ; No records, set balance to 0
+    
+    mov esi, eax        ; save file size
+    
+    ; Seek back to beginning of file
+    mov eax, 19         ; sys_lseek
+    mov ebx, [file_handle]
+    mov ecx, 0          ; offset from start
+    mov edx, 0          ; Go to beginning
+    int 0x80
+    
+    ; Calculate number of records
+    mov eax, esi
+    xor edx, edx
+    mov ecx, RECORD_SIZE
+    div ecx             
+    
+    mov ebx, 0          ; record counter
+    mov ecx, eax        ; total records
+    
+    calc_read_loop:
+        cmp ebx, ecx    ; end loop condition
+        jge calc_balance_done
+        
+        push ebx
+        push ecx
+        
+        ; Read one record
+        mov eax, 3      ; sys_read
+        mov ebx, [file_handle]
+        mov ecx, record_buffer
+        mov edx, RECORD_SIZE
+        int 0x80
+        
+        ; Process the record
+        call process_record_for_balance
+        pop ecx
+        pop ebx
+        
+        inc ebx
+        jmp calc_read_loop
+    
+calc_balance_done:
+    call close_file
+    mov eax, [current_balance]  ; get final balance
+    jmp calc_balance_exit
+    
+calc_balance_error:
+    call close_file
+    mov eax, 0          ; return 0 on error
+
+    ; Print error message
+    mov eax, 4          ; sys_write
+    mov ebx, 1          ; stdout
+    mov ecx, error_calc_balance
+    mov edx, error_calc_balance_len
+    int 0x80
+    
+    jmp repeat_menu             
+    
+calc_balance_exit:
+    pop edi
+    pop esi
+    pop edx
+    pop ecx
+    pop ebx
+    ret
+
+process_record_for_balance:
+    ; Input: record_buffer contains the record
+    push eax
+    push ebx
+    push ecx
+    push edx
+    push esi
+    
+    mov esi, record_buffer
+    
+    ; Skip ID (4 bytes)
+    add esi, 4
+    mov cl, [esi]       ; Get type (0 = income, 1 = expense)
+
+    ; Skip Type
+    add esi, 1
+    ; Get Amount (4 bytes)
+    mov ebx, [esi]      ; Get amount in cents
+    
+    ; Get current balance
+    mov eax, [current_balance]
+    
+    ; Check if it's income or expense
+    cmp cl, 0
+    je add_income_to_balance
+    jmp subtract_expense_from_balance
+    
+add_income_to_balance:
+    ; Add income to balance
+    add eax, ebx        ; add income amount
+    mov [current_balance], eax ; save updated balance
+    jmp process_done
+    
+subtract_expense_from_balance:
+    ; Subtract expense from balance
+    sub eax, ebx        ; subtract expense amount
+    mov [current_balance], eax ; save updated balance
+    
+process_done:
+    pop esi
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
     ret
