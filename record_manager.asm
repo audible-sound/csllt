@@ -828,7 +828,7 @@ perform_delete:
     ; Open temp file
     mov eax, 5          ; sys_open
     mov ebx, temp_filename
-    mov ecx, 0x241      ; O_CREAT | O_WRONLY | O_TRUNC
+    mov ecx, 0x241      ; read and write (truncate)
     mov edx, 0644       ; file permissions
     int 0x80
     
@@ -845,9 +845,8 @@ perform_delete:
     
     mov ebx, 0          ; record counter
     mov ecx, esi        ; total records
-    mov edx, 0          ; found flag (0 = not found, 1 = found)
 
-    ; Copy all records to temp file, skipping the one to delete
+    ; Copy all records and skipping the one to delete
     copy_loop:
         cmp ebx, ecx   
         jge copy_done
@@ -872,7 +871,7 @@ perform_delete:
         ; Check if this is the record to delete
         mov eax, [record_buffer]    ; Get ID from record, loads first four bytes
         cmp eax, edi                ; Compare with ID to delete
-        je found_record             ; Found the record to delete
+        je continue_loop             ; Found the record to delete
         
         ; Write record to temp file
         mov eax, 4      ; sys_write
@@ -887,10 +886,6 @@ perform_delete:
         
         jmp continue_loop
         
-    found_record:
-        mov edx, 1          ; Set found flag
-        ; Skip writing this record (don't copy to temp file)
-        
     continue_loop:
         pop ecx
         pop ebx
@@ -904,10 +899,6 @@ copy_error:
     jmp delete_error
     
 copy_done:
-    ; Check if the record was found
-    cmp edx, 0
-    je record_not_found
-    
     ; Close both files
     call close_file
     call close_temp_file
@@ -1002,11 +993,7 @@ copy_done:
         pop ecx
         pop ebx
         inc ebx
-        
-        ; Check if we've processed all records before continuing
-        cmp ebx, ecx
-        jge copy_back_done
-        
+                
         jmp copy_back_loop
     
 handle_empty_file:
@@ -1034,12 +1021,7 @@ copy_back_done:
     ; Close both files
     call close_file
     call close_temp_file
-    
-    ; ; Delete temp file
-    ; mov eax, 10         ; sys_unlink
-    ; mov ebx, temp_filename
-    ; int 0x80
-    
+        
     mov eax, 1          ; success
     jmp delete_exit
 
