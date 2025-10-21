@@ -6,6 +6,8 @@ extern check_balance
 extern add_income
 extern add_expense
 extern view_records
+extern delete_record
+extern edit_record
 
 section .data
     menu db "===========================",0xA
@@ -60,6 +62,10 @@ menu_loop:
     je add_expense
     cmp al, '4'
     je view_records
+    cmp al, '5'
+    je edit_record
+    cmp al, '6'
+    je delete_record
     cmp al, '7'
     je exit_program
 

@@ -3,13 +3,18 @@ global get_record_count
 global print_records
 global calculate_balance
 global print_amount
+global find_record_by_id
+global perform_delete
+global update_record
 
 extern repeat_menu
 extern print_new_line
 
 section .data
     filename db "budget.db", 0
+    temp_filename db "budget_temp.db", 0
     file_handle dd 0    ; reserve 4 bytes to store file descriptor
+    temp_file_handle dd 0    ; reserve 4 bytes to store temp file descriptor
     
     ; Record structure: [ID(4)][Type(1)][Amount(4)][Description(55)]
     RECORD_SIZE equ 64 ; Total: 64 bytes per record
@@ -678,3 +683,687 @@ process_done:
     pop ebx
     pop eax
     ret
+
+find_record_by_id:
+    ; Parameters:
+    ;   eax = ID to search for
+    ; Returns:
+    ;   eax = 1 if found, 0 if not found
+    push ebx
+    push ecx
+    push edx
+    push esi
+    push edi
+    
+    mov edi, eax        ; Save ID to search for
+    
+    ; Open file
+    mov eax, 5          ; sys_open
+    mov ebx, filename
+    mov ecx, 0          ; read only access
+    int 0x80
+    
+    cmp eax, 0
+    jl find_error
+    mov [file_handle], eax
+    
+    ; Get file size to check if there are records
+    mov eax, 19         ; sys_lseek
+    mov ebx, [file_handle]
+    mov ecx, 0          ; offset from start
+    mov edx, 2          ; Go to end of file
+    int 0x80
+    
+    cmp eax, 0
+    je id_not_found   ; No records
+    
+    mov esi, eax        ; save file size
+    
+    ; Seek back to beginning of file
+    mov eax, 19         ; sys_lseek
+    mov ebx, [file_handle]
+    mov ecx, 0          ; offset from start
+    mov edx, 0          ; Go to beginning
+    int 0x80
+    
+    ; Calculate number of records
+    mov eax, esi
+    xor edx, edx
+    mov ecx, RECORD_SIZE
+    div ecx             
+    
+    mov ebx, 0          ; record counter
+    mov ecx, eax        ; total records
+    
+    find_loop:
+        cmp ebx, ecx    ; end loop condition
+        jge id_not_found
+        
+        push ebx
+        push ecx
+        
+        ; Read one record
+        mov eax, 3      ; sys_read
+        mov ebx, [file_handle]
+        mov ecx, record_buffer
+        mov edx, RECORD_SIZE
+        int 0x80
+        
+        mov eax, [record_buffer]    ; Get ID from record
+        cmp eax, edi                ; Compare with search ID
+        je id_found
+        
+        pop ecx
+        pop ebx
+        inc ebx
+        jmp find_loop
+    
+id_found:
+    pop ecx
+    pop ebx
+    call close_file
+    mov eax, 1          
+    jmp find_exit
+    
+id_not_found:
+    call close_file
+    mov eax, 0          
+    jmp find_exit
+    
+find_error:
+    call close_file
+    mov eax, 0         
+
+find_exit:
+    pop edi
+    pop esi
+    pop edx
+    pop ecx
+    pop ebx
+    ret
+
+perform_delete:
+    ; Parameters:
+    ;   eax = ID to delete
+    ; Returns:
+    ;   eax = 1 if successful, 0 if failed
+    push ebx
+    push ecx
+    push edx
+    push esi
+    push edi
+    
+    mov edi, eax        ; Save ID to delete
+    
+    ; Open file for reading
+    mov eax, 5          ; sys_open
+    mov ebx, filename
+    mov ecx, 0          ; read only access
+    int 0x80
+    
+    cmp eax, 0
+    jl open_error
+    mov [file_handle], eax
+    
+    ; Get file size
+    mov eax, 19         ; sys_lseek
+    mov ebx, [file_handle]
+    mov ecx, 0          ; offset from start
+    mov edx, 2          ; Go to end of file
+    int 0x80
+    
+    cmp eax, 0
+    jle lseek_error     
+        
+    ; Calculate number of records
+    xor edx, edx
+    mov ecx, RECORD_SIZE
+    div ecx             ; eax = number of records
+    
+    cmp eax, 0
+    je delete_no_records     ; No records
+    
+    mov esi, eax        ; Save number of records in edx
+        
+    ; Open temp file
+    mov eax, 5          ; sys_open
+    mov ebx, temp_filename
+    mov ecx, 0x241      ; O_CREAT | O_WRONLY | O_TRUNC
+    mov edx, 0644       ; file permissions
+    int 0x80
+    
+    cmp eax, 0
+    jl delete_error
+    mov [temp_file_handle], eax
+    
+    ; Seek to beginning
+    mov eax, 19         ; sys_lseek
+    mov ebx, [file_handle]
+    mov ecx, 0          ; offset from start
+    mov edx, 0          ; Go to beginning
+    int 0x80
+    
+    mov ebx, 0          ; record counter
+    mov ecx, esi        ; total records
+    mov edx, 0          ; found flag (0 = not found, 1 = found)
+
+    ; Copy all records to temp file, skipping the one to delete
+    copy_loop:
+        cmp ebx, ecx   
+        jge copy_done
+        
+        push ebx
+        push ecx
+        
+        ; Read one record
+        mov eax, 3      ; sys_read
+        mov ebx, [file_handle]
+        mov ecx, record_buffer
+        mov edx, RECORD_SIZE
+        int 0x80
+        
+        ; Check if read was successful
+        cmp eax, 0
+        jl copy_error     ; If read failed
+        je copy_done      ; If read 0 bytes, pointer reached EOF
+        cmp eax, RECORD_SIZE
+        jne copy_error    ; If read different number of bytes, error
+        
+        ; Check if this is the record to delete
+        mov eax, [record_buffer]    ; Get ID from record, loads first four bytes
+        cmp eax, edi                ; Compare with ID to delete
+        je found_record             ; Found the record to delete
+        
+        ; Write record to temp file
+        mov eax, 4      ; sys_write
+        mov ebx, [temp_file_handle]
+        mov ecx, record_buffer
+        mov edx, RECORD_SIZE
+        int 0x80
+        
+        ; Check if write was successful
+        cmp eax, RECORD_SIZE
+        jne copy_error
+        
+        jmp continue_loop
+        
+    found_record:
+        mov edx, 1          ; Set found flag
+        ; Skip writing this record (don't copy to temp file)
+        
+    continue_loop:
+        pop ecx
+        pop ebx
+        inc ebx
+        jmp copy_loop
+    
+copy_error:
+    ; Clean up and exit on error
+    pop ecx
+    pop ebx
+    jmp delete_error
+    
+copy_done:
+    ; Check if the record was found
+    cmp edx, 0
+    je record_not_found
+    
+    ; Close both files
+    call close_file
+    call close_temp_file
+
+    ; Open temp file for reading
+    mov eax, 5          ; sys_open
+    mov ebx, temp_filename
+    mov ecx, 0          ; read only access
+    int 0x80
+    
+    cmp eax, 0
+    jl copy_back_error    
+    mov [temp_file_handle], eax
+        
+    ; Get file size
+    mov eax, 19         ; sys_lseek
+    mov ebx, [temp_file_handle]
+    mov ecx, 0          ; offset from start
+    mov edx, 2          ; Go to end of file
+    int 0x80
+    
+    cmp eax, 0
+    jl delete_error     
+        
+    ; Calculate number of records
+    xor edx, edx
+    mov ecx, RECORD_SIZE
+    div ecx             ; eax = number of records
+    
+    cmp eax, 0
+    je handle_empty_file     ; No records in temp file (all deleted)
+    
+    mov esi, eax        ; save number of records
+
+    ; Open original file for writing
+    mov eax, 5          ; sys_open
+    mov ebx, filename
+    mov ecx, 0x241       ; read write and truncate
+    mov edx, 0644        ; file permissions
+    int 0x80
+    
+    cmp eax, 0
+    jl delete_error
+    mov [file_handle], eax
+    
+    ; Seek to beginning of temp file
+    mov eax, 19         ; sys_lseek
+    mov ebx, [temp_file_handle]
+    mov ecx, 0          ; offset from start
+    mov edx, 0          ; Go to beginning
+    int 0x80
+    
+    cmp eax, 0
+    jl copy_back_error
+    
+    mov ebx, 0          ; record counter
+    mov ecx, esi        ; total records
+    
+    ; Copy all data from temp file to original file
+    copy_back_loop:
+        cmp ebx, ecx
+        jge copy_back_done
+        
+        push ebx
+        push ecx
+
+        ; Read one record from temp file
+        mov eax, 3      ; sys_read
+        mov ebx, [temp_file_handle]
+        mov ecx, record_buffer
+        mov edx, RECORD_SIZE
+        int 0x80
+        
+        ; Check if read was successful
+        cmp eax, 0
+        jl copy_back_error     ; If read failed
+        je copy_back_done      ; pointer reached EOF
+        cmp eax, RECORD_SIZE
+        jne copy_back_error    ; If read different number of bytes, error
+        
+        ; Write record to original file
+        mov eax, 4      ; sys_write
+        mov ebx, [file_handle]
+        mov ecx, record_buffer
+        mov edx, RECORD_SIZE
+        int 0x80
+        
+        ; Check if write was successful
+        cmp eax, RECORD_SIZE
+        jne copy_back_error     ; If write failed 
+
+        pop ecx
+        pop ebx
+        inc ebx
+        
+        ; Check if we've processed all records before continuing
+        cmp ebx, ecx
+        jge copy_back_done
+        
+        jmp copy_back_loop
+    
+handle_empty_file:
+    ; All records were deleted, just truncate the original file
+    call close_temp_file
+    
+    ; Open original file for writing (truncate to 0)
+    mov eax, 5          ; sys_open
+    mov ebx, filename
+    mov ecx, 0x241       ; O_CREAT | O_WRONLY | O_TRUNC
+    mov edx, 0644        ; file permissions
+    int 0x80
+    
+    cmp eax, 0
+    jl delete_error
+    mov [file_handle], eax
+    
+    ; Close the file (it's now empty)
+    call close_file
+    
+    mov eax, 1          ; success
+    jmp delete_exit
+    
+copy_back_done:
+    ; Close both files
+    call close_file
+    call close_temp_file
+    
+    ; ; Delete temp file
+    ; mov eax, 10         ; sys_unlink
+    ; mov ebx, temp_filename
+    ; int 0x80
+    
+    mov eax, 1          ; success
+    jmp delete_exit
+
+copy_back_error:
+    ; Clean up stack if needed
+    pop ecx
+    pop ebx
+    call close_file
+    call close_temp_file
+    jmp delete_error
+    
+delete_no_records:
+    call close_file
+    mov eax, 0          ; failure - no records to delete
+    jmp delete_exit
+
+record_not_found:
+    call close_file
+    call close_temp_file
+    mov eax, 0          ; failure - record not found
+    jmp delete_exit
+
+delete_error:
+    call close_file
+    call close_temp_file
+    mov eax, 0          ; failure
+    
+delete_exit:
+    pop edi
+    pop esi
+    pop edx
+    pop ecx
+    pop ebx
+    ret
+
+close_temp_file:
+    mov eax, 6          ; sys_close
+    mov ebx, [temp_file_handle]
+    int 0x80
+    ret
+
+update_record:
+    ; Parameters:
+    ;   eax = ID to update
+    ;   ebx = field to update (1 = amount, 2 = description)
+    ;   ecx = new amount (if ebx = 1) or new description pointer (if ebx = 2)
+    ;   edx = new description length (if ebx = 2)
+    ; Returns:
+    ;   eax = 1 if successful, 0 if failed
+    push ebx
+    push ecx
+    push edx
+    push esi
+    push edi
+    
+    mov edi, eax        ; Save ID to update
+    mov esi, ebx        ; Save field to update
+    push ecx            ; Save new value
+    push edx            ; Save description length
+    
+    ; Open file for reading
+    mov eax, 5          ; sys_open
+    mov ebx, filename
+    mov ecx, 0          ; read only access
+    int 0x80
+    
+    cmp eax, 0
+    jl update_error
+    mov [file_handle], eax
+    
+    ; Get file size
+    mov eax, 19         ; sys_lseek
+    mov ebx, [file_handle]
+    mov ecx, 0          ; offset from start
+    mov edx, 2          ; Go to end of file
+    int 0x80
+    
+    cmp eax, 0
+    jle update_error
+    
+    ; Calculate number of records
+    xor edx, edx
+    mov ecx, RECORD_SIZE
+    div ecx             ; eax = number of records
+    
+    cmp eax, 0
+    je update_error     ; No records
+    
+    mov esi, eax        ; Save number of records
+    
+    ; Open temp file
+    mov eax, 5          ; sys_open
+    mov ebx, temp_filename
+    mov ecx, 2          ; open file read write access
+    int 0x80
+    
+    cmp eax, 0
+    jl update_error
+    mov [temp_file_handle], eax
+    
+    ; Seek to beginning
+    mov eax, 19         ; sys_lseek
+    mov ebx, [file_handle]
+    mov ecx, 0          ; offset from start
+    mov edx, 0          ; Go to beginning
+    int 0x80
+    
+    mov ebx, 0          ; record counter
+    mov ecx, esi        ; total records
+    mov esi, 0          ; found flag
+
+    ; Copy all records to temp file, updating the target record
+    update_copy_loop:
+        cmp ebx, ecx   
+        jge update_copy_done
+        
+        push ebx
+        push ecx
+        
+        ; Read one record
+        mov eax, 3      ; sys_read
+        mov ebx, [file_handle]
+        mov ecx, record_buffer
+        mov edx, RECORD_SIZE
+        int 0x80
+        
+        ; Check if read was successful
+        cmp eax, 0
+        jl update_copy_error     ; If read failed
+        je update_copy_done      ; If read 0 bytes, pointer reached EOF
+        cmp eax, RECORD_SIZE
+        jne update_copy_error    ; If read different number of bytes, error
+        
+        ; Check if this is the record to update
+        mov eax, [record_buffer]    ; Get ID from record
+        cmp eax, edi                ; Compare with ID to update
+        je update_this_record       ; Update this record
+        
+        ; Write record to temp file (unchanged)
+        mov eax, 4      ; sys_write
+        mov ebx, [temp_file_handle]
+        mov ecx, record_buffer
+        mov edx, RECORD_SIZE
+        int 0x80
+        
+        ; Check if write was successful
+        cmp eax, RECORD_SIZE
+        jne update_copy_error
+        
+        jmp update_skip_record
+        
+    update_this_record:
+        ; Update the record based on field type
+        pop edx         ; Get description length
+        pop ecx         ; Get new value
+        pop esi         ; Get field type
+        push esi        ; Restore field type
+        push ecx        ; Restore new value
+        push edx        ; Restore description length
+        
+        cmp esi, 1
+        je update_amount_field
+        cmp esi, 2
+        je update_description_field
+        jmp update_copy_error  ; Invalid field type
+        
+    update_amount_field:
+        ; Update amount field (offset 5-8 in record)
+        mov [record_buffer + 5], ecx  ; Store new amount
+        jmp update_write_record
+        
+    update_description_field:
+        ; Update description field (offset 9-63 in record)
+        ; Clear description field first
+        mov edi, record_buffer
+        add edi, 9
+        mov ecx, 55
+        xor eax, eax
+        rep stosb
+        
+        ; Copy new description
+        mov edi, record_buffer
+        add edi, 9
+        mov esi, ecx    ; ecx contains new description pointer
+        mov ecx, edx    ; edx contains description length
+        rep movsb
+        
+    update_write_record:
+        ; Write updated record to temp file
+        mov eax, 4      ; sys_write
+        mov ebx, [temp_file_handle]
+        mov ecx, record_buffer
+        mov edx, RECORD_SIZE
+        int 0x80
+        
+        ; Check if write was successful
+        cmp eax, RECORD_SIZE
+        jne update_copy_error
+        
+        mov esi, 1      ; Set found flag
+        
+    update_skip_record:
+        pop ecx
+        pop ebx
+        inc ebx
+        jmp update_copy_loop
+    
+    update_copy_error:
+        ; Clean up and exit on error
+        pop ecx
+        pop ebx
+        jmp update_error
+    
+    update_copy_done:
+        ; Check if record was found
+        cmp esi, 0
+        je update_not_found
+        
+        ; Close both files
+        call close_file
+        call close_temp_file
+
+        ; Now copy data back from temp file to original file
+        mov eax, 5          ; sys_open
+        mov ebx, filename
+        mov ecx, 577o       ; O_CREAT | O_WRONLY | O_TRUNC
+        mov edx, 644o      ; file permissions
+        int 0x80
+        
+        cmp eax, 0
+        jle update_error    ; file descriptor should be positive
+        mov [file_handle], eax
+        
+        ; Open temp file for reading
+        mov eax, 5          ; sys_open
+        mov ebx, temp_filename
+        mov ecx, 0          ; read only access
+        int 0x80
+        
+        cmp eax, 0
+        jle update_error    
+        mov [temp_file_handle], eax
+        
+        ; Get temp file size
+        mov eax, 19         ; sys_lseek
+        mov ebx, [temp_file_handle]
+        mov ecx, 0          ; offset from start
+        mov edx, 2          ; Go to end of file
+        int 0x80
+        
+        cmp eax, 0
+        je update_copy_back_done   ; No data to copy back
+        
+        ; Seek back to beginning of temp file
+        mov eax, 19         ; sys_lseek
+        mov ebx, [temp_file_handle]
+        mov ecx, 0          ; offset from start
+        mov edx, 0          ; Go to beginning
+        int 0x80
+        
+        ; Copy all data from temp file to original file
+        update_copy_back_loop:
+            ; Read one record from temp file
+            mov eax, 3      ; sys_read
+            mov ebx, [temp_file_handle]
+            mov ecx, record_buffer
+            mov edx, RECORD_SIZE
+            int 0x80
+            
+            ; Check if read was successful
+            cmp eax, 0
+            jl update_copy_back_error     ; If read failed
+            je update_copy_back_done      ; pointer reached EOF
+            cmp eax, RECORD_SIZE
+            jne update_copy_back_error    ; If read different number of bytes, error
+            
+            ; Write record to original file
+            mov eax, 4      ; sys_write
+            mov ebx, [file_handle]
+            mov ecx, record_buffer
+            mov edx, RECORD_SIZE
+            int 0x80
+            
+            ; Check if write was successful
+            cmp eax, 0
+            jl update_copy_back_error     ; If write failed (negative return)
+            cmp eax, RECORD_SIZE
+            jne update_copy_back_error    ; If didn't write all bytes
+            
+            jmp update_copy_back_loop
+        
+    update_copy_back_done:
+        ; Close both files
+        call close_file
+        call close_temp_file
+        
+        ; Delete temp file
+        mov eax, 10         ; sys_unlink
+        mov ebx, temp_filename
+        int 0x80
+        
+        mov eax, 1          ; success
+        jmp update_exit
+
+    update_copy_back_error:
+        call close_file
+        call close_temp_file
+        jmp update_error
+    
+    update_not_found:
+        call close_file
+        call close_temp_file
+        mov eax, 0          ; record not found
+        jmp update_exit
+        
+    update_error:
+        call close_file
+        call close_temp_file
+        mov eax, 0          ; failure
+    
+    update_exit:
+        pop edi
+        pop esi
+        pop edx
+        pop ecx
+        pop ebx
+        ret

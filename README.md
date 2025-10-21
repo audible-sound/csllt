@@ -31,5 +31,7 @@ nasm -f elf32 add_expense.asm -o add_expense.o
 nasm -f elf32 view_records.asm -o view_records.o
 nasm -f elf32 record_manager.asm -o record_manager.o
 nasm -f elf32 check_balance.asm -o check_balance.o
-ld -m elf_i386 -o main main.o add_income.o record_manager.o view_records.o add_expense.o check_balance.o
+nasm -f elf32 delete_record.asm -o delete_record.o
+nasm -f elf32 edit_record.asm -o edit_record.o
+ld -m elf_i386 -o main main.o add_income.o record_manager.o view_records.o add_expense.o check_balance.o delete_record.o edit_record.o
 ```
