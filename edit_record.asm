@@ -79,7 +79,7 @@ edit_record:
     mov edx, 16
     int 0x80
 
-    ; Convert ASCII to number
+    ; Convert string input to integer
     call convert_string_to_number
     cmp eax, 0
     jle invalid_id
@@ -152,7 +152,7 @@ edit_amount:
     pop eax             ; Get ID from stack
     mov ebx, 1          ; Field type: 1 = amount
     mov ecx, [current_amount]  ; New amount
-    mov edx, 0          ; Not used for amount
+    mov edx, 0          ; desc length / not used for amount
     call update_record
     
     cmp eax, 0
@@ -195,26 +195,22 @@ edit_description:
     mov byte [ebx], 0   ; Replace newline with null terminator
     
     ; Calculate description length
-    mov esi, desc_buffer
     mov edi, desc_buffer
-    mov ecx, 0
+    mov edx, desc_buffer
 
     calc_desc_len:
-        cmp byte [edi], 0
+        cmp byte [edx], 0
         je calc_desc_done
-        inc edi
-        inc ecx
+        inc edx
         jmp calc_desc_len
 
     calc_desc_done:
         ; Call update_record with description
         pop eax             ; Get ID from stack
         mov ebx, 2          ; Field type: 2 = description
-        mov edx, desc_buffer ; Description pointer
-        push ecx            ; Save description length
-        mov ecx, ecx        ; Description length
+        mov ecx, desc_buffer ; Description pointer
+        sub edx, edi        ; Description length
         call update_record
-        pop ecx             ; Clean up stack
         
         cmp eax, 0
         je edit_error
