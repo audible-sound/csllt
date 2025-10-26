@@ -34,6 +34,7 @@ section .data
 
 section .bss
     input resb 8
+    tmp resb 1
 
 section .text
 _start:
@@ -92,5 +93,5 @@ repeat_menu:
 
 exit_program:
     mov eax, 1          ; call sys_exit
-    xor ebx, ebx        ; set exit code to 0 (success)
+    xor ebx, ebx        ; set exit code to 0
     int 0x80

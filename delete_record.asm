@@ -1,4 +1,7 @@
 global delete_record
+global record_not_found
+global record_not_found_len
+
 extern repeat_menu
 extern find_record_by_id
 extern perform_delete
@@ -36,21 +39,18 @@ delete_record:
     push esi
     push edi
 
-    ; Print ID prompt
     mov eax, 4          ; sys_write
     mov ebx, 1          ; stdout
     mov ecx, id_prompt
     mov edx, id_prompt_len
     int 0x80
 
-    ; Read ID from user input
     mov eax, 3          ; sys_read
     mov ebx, 0          ; stdin
     mov ecx, input_buffer
     mov edx, 16
     int 0x80
 
-    ; Convert ASCII to number
     call convert_string_to_number
     cmp eax, 0
     jle invalid_id
@@ -58,33 +58,28 @@ delete_record:
     ; Save the ID for later use
     push eax
 
-    ; Find the record
     call find_record_by_id
     cmp eax, 0
     je record_not_found_msg
 
-    ; Record found, show confirmation prompt
     mov eax, 4          ; sys_write
     mov ebx, 1          ; stdout
     mov ecx, confirmation_prompt
     mov edx, confirmation_prompt_len
     int 0x80
 
-    ; Read confirmation
     mov eax, 3          ; sys_read
     mov ebx, 0          ; stdin
     mov ecx, input_buffer
     mov edx, 16
     int 0x80
 
-    ; Check if user confirmed (y or Y)
     mov al, [input_buffer]
     cmp al, 'y'
     je delete_confirmed
     cmp al, 'Y'
     je delete_confirmed
 
-    ; User cancelled
     mov eax, 4          ; sys_write
     mov ebx, 1          ; stdout
     mov ecx, delete_cancelled
@@ -98,7 +93,6 @@ delete_confirmed:
     cmp eax, 0 ; 0 fail to delete / 1 delete successful
     je delete_error
 
-    ; Success message
     mov eax, 4          ; sys_write
     mov ebx, 1          ; stdout
     mov ecx, delete_success
@@ -113,7 +107,7 @@ record_not_found_msg:
     mov ecx, record_not_found
     mov edx, record_not_found_len
     int 0x80
-    jmp delete_exit
+    jmp delete_record
 
 invalid_id:
     mov eax, 4          ; sys_write
@@ -121,7 +115,7 @@ invalid_id:
     mov ecx, record_not_found
     mov edx, record_not_found_len
     int 0x80
-    jmp delete_exit
+    jmp delete_record
 
 delete_error:
     mov eax, 4          ; sys_write
@@ -141,7 +135,6 @@ delete_exit:
     call repeat_menu
 
 convert_string_to_number:
-    ; Convert string in input_buffer to number in eax
     push ebx
     push ecx
     push edx

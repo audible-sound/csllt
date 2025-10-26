@@ -40,7 +40,7 @@ print_balance_value:
 
 process_amount:    
     ; Check if value is negative
-    test eax, eax       ; test sign 0 non negative, 1 is negative
+    test eax, eax       
     js process_negative ; jump if sign
     ret
 

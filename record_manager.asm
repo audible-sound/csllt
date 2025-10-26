@@ -11,8 +11,9 @@ extern repeat_menu
 extern print_new_line
 
 section .data
-    filename db "budget.db", 0
-    temp_filename db "budget_temp.db", 0
+    filename db "budget.dat", 0
+    temp_filename db "budget_temp.dat", 0
+
     file_handle dd 0    ; reserve 4 bytes to store file descriptor
     temp_file_handle dd 0    ; reserve 4 bytes to store temp file descriptor
     
@@ -48,7 +49,6 @@ section .bss
 
 section .text
 add_record:
-    ; Add record to db file
     ; Parameters:
     ;   eax = record type (0 = income, 1 = expense)
     ;   ebx = amount in cents (32-bit integer)
@@ -64,7 +64,6 @@ add_record:
     call get_next_record_id
     push eax            ; place id value to the stack
 
-    ; Open file for append
     mov eax, 5          ; sys_open
     mov ebx, filename
     mov ecx, 2001o      ; file flags (write only access, append to end of file)
@@ -84,7 +83,6 @@ add_record:
         inc esi
         loop clear_loop
     
-    ; Build record
     mov esi, record_buffer
     mov edi, 0             ; pointer to record buffer
     
@@ -109,7 +107,6 @@ add_record:
 
     lea edi, [esi + edi]
     mov esi, eax
-    cld 
     rep movsb
                 
     ; Write record to file
@@ -134,11 +131,10 @@ open_error:
     jmp repeat_menu
 
 get_next_record_id:
-    ; Get the next available record ID
-    ; Keep original values of registers
     push ebx
     push ecx
     push edx
+    push esi
     
     ; Open file
     mov eax, 5          ; sys_open
@@ -150,32 +146,64 @@ get_next_record_id:
     jl open_error       ; if error
     mov [file_handle], eax        ; file descriptor
     
-    ; Get file size using lseek to end of file
+    mov esi, 0          ; highest ID
+    mov ebx, 0          ; current ID
+    
     mov eax, 19         ; sys_lseek
-    mov ebx, [file_handle]        ; file descriptor
-    mov ecx, 0          ; offset
+    mov ebx, [file_handle]
+    mov ecx, 0
     mov edx, 2          ; SEEK_END
     int 0x80
     
     cmp eax, 0
-    jl lseek_error      ; if error
+    jle empty_file_id      
     
-    xor edx, edx
-    mov ecx, RECORD_SIZE
-    div ecx             ; eax = number of records
+    mov eax, 19         ; sys_lseek
+    mov ebx, [file_handle]
+    mov ecx, 0
+    mov edx, 0          ; SEEK_SET
+    int 0x80
     
-    ; Get the next id
-    inc eax
-    push eax        ; Save ID value
+    mov ebx, 0          ; reset counter
+    
+read_records_loop:
+    mov eax, 3          ; sys_read
+    mov ebx, [file_handle]
+    mov ecx, record_buffer
+    mov edx, RECORD_SIZE
+    int 0x80
+    
+    cmp eax, 0
+    jl open_error
+    je read_done      
+    
+    mov eax, [record_buffer]    ; get the ID (4 bytes)
+    
+    ; Compare with current highest ID
+    cmp eax, esi
+    jle id_smaller_equal    
+    mov esi, eax        
+    
+id_smaller_equal:
+    jmp read_records_loop
+
+read_done:
+    inc esi
+    mov eax, esi        
+    push eax            
     call close_file
-    pop eax         ; Get the ID value
+    pop eax           
     jmp id_done
 
-lseek_error:
+empty_file_id:
+    mov eax, 1
+    push eax           
     call close_file
-    jmp open_error
+    pop eax             
+    jmp id_done
         
 id_done:
+    pop esi
     pop edx
     pop ecx
     pop ebx
@@ -198,7 +226,6 @@ print_records:
     jl open_error
     mov [file_handle], eax
 
-    ; Get file size to check if there are records
     mov eax, 19         ; sys_lseek
     mov ebx, [file_handle]
     mov ecx, 0          ; offset from start
@@ -213,8 +240,8 @@ print_records:
     ; Seek back to beginning of file
     mov eax, 19         ; sys_lseek
     mov ebx, [file_handle]
-    mov ecx, 0          ; offset from start
-    mov edx, 0          ; Go to beginning
+    mov ecx, 0          
+    mov edx, 0          
     int 0x80
 
     ; Display table header
@@ -234,7 +261,7 @@ print_records:
     mov ecx, eax        ; copy total records
 
     read_loop:
-        cmp ebx, ecx    ; end loop condition
+        cmp ebx, ecx    
         jge display_done
 
         push ebx
@@ -260,8 +287,6 @@ display_done:
     ret
 
 print_row:
-    ; Print a single record row
-    
     push eax
     push ebx
     push ecx
@@ -321,9 +346,9 @@ after_amount:
     call print_space
     
     ; Print Description (55 bytes)
-    add esi, 4              ; Move to description field
-    mov ecx, 55             ; Max description length
-    mov edi, 0              ; Counter for actual chars
+    add esi, 4             
+    mov ecx, 55             
+    mov edi, 0             
     
 count_desc_chars:
     cmp edi, ecx
@@ -336,8 +361,8 @@ count_desc_chars:
 print_desc:
     mov eax, 4              ; sys_write
     mov ebx, 1              ; stdout
-    mov ecx, esi            ; description pointer
-    mov edx, edi            ; actual length
+    mov ecx, esi            
+    mov edx, edi            
     int 0x80
 
     call print_new_line
@@ -351,7 +376,6 @@ print_desc:
     ret
 
 print_number:
-    ; Convert number in eax to string and print
     push eax
     push ebx
     push ecx
@@ -387,11 +411,11 @@ convert_loop:
     jmp convert_loop
     
 print_converted:
-    inc esi                 ; Point to start of number
+    inc esi                 
     mov eax, 4              ; sys_write
     mov ebx, 1              ; stdout
-    mov edx, ecx            ; length (ecx contains the digit count)
-    mov ecx, esi            ; pointer to number string
+    mov edx, ecx           
+    mov ecx, esi            
     int 0x80
     
     pop edi
@@ -403,7 +427,6 @@ print_converted:
     ret
 
 print_space:
-    ; print space character
     push eax
     push ebx
     push ecx
@@ -422,7 +445,6 @@ print_space:
     ret
 
 print_separator:
-    ;print |
     push eax
     push ebx
     push ecx
@@ -442,10 +464,6 @@ print_separator:
 
 
 print_amount:
-    ; Print amount as dollars with two decimals
-    ; Input: eax = amount in cents (e.g., 12345 = $123.45)
-    ; Example: 12345 -> "123.45"
-    ; Example: 12300 -> "123.00"
     push eax
     push ebx
     push ecx
@@ -463,12 +481,12 @@ print_amount:
     mov ebx, 100
     xor edx, edx
     div ebx                  ; eax quotient (dollar), edx remainder (cents)
-    push eax                 ; keep dollar
+    push eax                 
     
     ; Write cents
-    mov ebx, 10              ; ebx will be the divisor
-    xor eax, eax             ; clear eax
-    mov al, dl               ; Move cents to al
+    mov ebx, 10              
+    xor eax, eax             
+    mov al, dl               
     div bl                   ; al (quotient) tens, ah (remainder) ones
     add al, '0'              ; Convert to ASCII
     add ah, '0' 
@@ -496,7 +514,7 @@ write_dollars_loop:
     xor edx, edx
     div ebx                  ; EDX = remainder (digit), EAX = quotient
     add dl, '0'              ; Convert to ASCII
-    mov [esi], dl            ; Store digit
+    mov [esi], dl            
     dec esi
     jmp write_dollars_loop
 
@@ -508,9 +526,8 @@ finalize_amount:
     inc esi                  ; Point to start of string
     mov eax, 4               ; sys_write
     mov ebx, 1               ; stdout
-    mov ecx, esi             ; String to print
+    mov ecx, esi             
 
-    ; Calculate string length
     mov edi, esi
 len_loop_amt:
     cmp byte [edi], 0         ; check null terminator
@@ -552,7 +569,6 @@ calculate_balance:
     xor eax, eax        
     mov [current_balance], eax
     
-    ; Open file for reading
     mov eax, 5          ; sys_open
     mov ebx, filename
     mov ecx, 0          ; read only access
@@ -562,23 +578,21 @@ calculate_balance:
     jl calc_balance_error
     mov [file_handle], eax
     
-    ; Get file size to check if there are records
     mov eax, 19         ; sys_lseek
     mov ebx, [file_handle]
-    mov ecx, 0          ; offset from start
-    mov edx, 2          ; Go to end of file
+    mov ecx, 0         
+    mov edx, 2          
     int 0x80
     
     cmp eax, 0
-    je calc_balance_done    ; No records, set balance to 0
+    je calc_balance_done    
     
     mov esi, eax        ; save file size
     
-    ; Seek back to beginning of file
     mov eax, 19         ; sys_lseek
     mov ebx, [file_handle]
-    mov ecx, 0          ; offset from start
-    mov edx, 0          ; Go to beginning
+    mov ecx, 0          
+    mov edx, 0          
     int 0x80
     
     ; Calculate number of records
@@ -666,15 +680,13 @@ process_record_for_balance:
     jmp subtract_expense_from_balance
     
 add_income_to_balance:
-    ; Add income to balance
-    add eax, ebx        ; add income amount
-    mov [current_balance], eax ; save updated balance
+    add eax, ebx       
+    mov [current_balance], eax 
     jmp process_done
     
 subtract_expense_from_balance:
-    ; Subtract expense from balance
-    sub eax, ebx        ; subtract expense amount
-    mov [current_balance], eax ; save updated balance
+    sub eax, ebx       
+    mov [current_balance], eax 
     
 process_done:
     pop esi
@@ -685,10 +697,6 @@ process_done:
     ret
 
 find_record_by_id:
-    ; Parameters:
-    ;   eax = ID to search for
-    ; Returns:
-    ;   eax = 1 if found, 0 if not found
     push ebx
     push ecx
     push edx
@@ -715,11 +723,10 @@ find_record_by_id:
     int 0x80
     
     cmp eax, 0
-    je id_not_found   ; No records
+    je id_not_found   
     
     mov esi, eax        ; save file size
     
-    ; Seek back to beginning of file
     mov eax, 19         ; sys_lseek
     mov ebx, [file_handle]
     mov ecx, 0          ; offset from start
@@ -749,8 +756,8 @@ find_record_by_id:
         mov edx, RECORD_SIZE
         int 0x80
         
-        mov eax, [record_buffer]    ; Get ID from record
-        cmp eax, edi                ; Compare with search ID
+        mov eax, [record_buffer]    
+        cmp eax, edi               
         je id_found
         
         pop ecx
@@ -783,10 +790,6 @@ find_exit:
     ret
 
 perform_delete:
-    ; Parameters:
-    ;   eax = ID to delete
-    ; Returns:
-    ;   eax = 1 if successful, 0 if failed
     push ebx
     push ecx
     push edx
@@ -805,7 +808,6 @@ perform_delete:
     jl open_error
     mov [file_handle], eax
     
-    ; Get file size
     mov eax, 19         ; sys_lseek
     mov ebx, [file_handle]
     mov ecx, 0          ; offset from start
@@ -813,23 +815,22 @@ perform_delete:
     int 0x80
     
     cmp eax, 0
-    jle lseek_error     
+    jl open_error     
         
-    ; Calculate number of records
     xor edx, edx
     mov ecx, RECORD_SIZE
-    div ecx             ; eax = number of records
+    div ecx             
     
     cmp eax, 0
-    je delete_no_records     ; No records
+    je delete_no_records    
     
-    mov esi, eax        ; Save number of records in edx
+    mov esi, eax        ; Save number of records
         
     ; Open temp file
     mov eax, 5          ; sys_open
     mov ebx, temp_filename
     mov ecx, 0x241      ; read and write (truncate)
-    mov edx, 0644       ; file permissions
+    mov edx, 0644       
     int 0x80
     
     cmp eax, 0
@@ -839,14 +840,13 @@ perform_delete:
     ; Seek to beginning
     mov eax, 19         ; sys_lseek
     mov ebx, [file_handle]
-    mov ecx, 0          ; offset from start
-    mov edx, 0          ; Go to beginning
+    mov ecx, 0          
+    mov edx, 0         
     int 0x80
     
     mov ebx, 0          ; record counter
     mov ecx, esi        ; total records
 
-    ; Copy all records and skipping the one to delete
     copy_loop:
         cmp ebx, ecx   
         jge copy_done
@@ -863,15 +863,15 @@ perform_delete:
         
         ; Check if read was successful
         cmp eax, 0
-        jl copy_error     ; If read failed
-        je copy_done      ; If read 0 bytes, pointer reached EOF
+        jl copy_error    
+        je copy_done      
         cmp eax, RECORD_SIZE
-        jne copy_error    ; If read different number of bytes, error
+        jne copy_error   
         
         ; Check if this is the record to delete
-        mov eax, [record_buffer]    ; Get ID from record, loads first four bytes
-        cmp eax, edi                ; Compare with ID to delete
-        je continue_loop             ; Found the record to delete
+        mov eax, [record_buffer]    
+        cmp eax, edi                
+        je continue_loop             
         
         ; Write record to temp file
         mov eax, 4      ; sys_write
@@ -880,7 +880,6 @@ perform_delete:
         mov edx, RECORD_SIZE
         int 0x80
         
-        ; Check if write was successful
         cmp eax, RECORD_SIZE
         jne copy_error
         
@@ -893,7 +892,6 @@ perform_delete:
         jmp copy_loop
     
 copy_error:
-    ; Clean up and exit on error
     pop ecx
     pop ebx
     jmp delete_update_error
@@ -903,7 +901,6 @@ copy_done:
     call close_file
     call close_temp_file
 
-    ; Open temp file for reading
     mov eax, 5          ; sys_open
     mov ebx, temp_filename
     mov ecx, 0          ; read only access
@@ -916,8 +913,8 @@ copy_done:
     ; Get file size
     mov eax, 19         ; sys_lseek
     mov ebx, [temp_file_handle]
-    mov ecx, 0          ; offset from start
-    mov edx, 2          ; Go to end of file
+    mov ecx, 0          
+    mov edx, 2          
     int 0x80
     
     cmp eax, 0
@@ -947,8 +944,8 @@ copy_done:
     ; Seek to beginning of temp file
     mov eax, 19         ; sys_lseek
     mov ebx, [temp_file_handle]
-    mov ecx, 0          ; offset from start
-    mov edx, 0          ; Go to beginning
+    mov ecx, 0          
+    mov edx, 0         
     int 0x80
     
     cmp eax, 0
@@ -974,10 +971,10 @@ copy_done:
         
         ; Check if read was successful
         cmp eax, 0
-        jl copy_back_error     ; If read failed
-        je copy_back_done      ; pointer reached EOF
+        jl copy_back_error     
+        je copy_back_done     
         cmp eax, RECORD_SIZE
-        jne copy_back_error    ; If read different number of bytes, error
+        jne copy_back_error   
         
         ; Write record to original file
         mov eax, 4      ; sys_write
@@ -997,14 +994,12 @@ copy_done:
         jmp copy_back_loop
     
 handle_empty_file:
-    ; All records were deleted, just truncate the original file
     call close_temp_file
     
-    ; Open original file for writing (truncate to 0)
     mov eax, 5          ; sys_open
     mov ebx, filename
-    mov ecx, 0x241       ; O_CREAT | O_WRONLY | O_TRUNC
-    mov edx, 0644        ; file permissions
+    mov ecx, 0x241      
+    mov edx, 0644       
     int 0x80
     
     cmp eax, 0
@@ -1033,19 +1028,13 @@ copy_back_error:
     
 delete_no_records:
     call close_file
-    mov eax, 0          ; failure - no records to delete
-    jmp delete_update_exit
-
-record_not_found:
-    call close_file
-    call close_temp_file
-    mov eax, 0          ; failure - record not found
+    mov eax, 0         
     jmp delete_update_exit
 
 delete_update_error:
     call close_file
     call close_temp_file
-    mov eax, 0          ; failure
+    mov eax, 0          
     
 delete_update_exit:
     pop edi
@@ -1067,8 +1056,6 @@ update_record:
     ;   ebx = field to update (1 = amount, 2 = description)
     ;   ecx = new amount (if ebx = 1) or new description pointer (if ebx = 2)
     ;   edx = new description length (if ebx = 2)
-    ; Returns:
-    ;   eax = 1 if successful, 0 if failed
     push ebx
     push ecx
     push edx
@@ -1090,8 +1077,8 @@ update_record:
     ; Get file size
     mov eax, 19         ; sys_lseek
     mov ebx, [file_handle]
-    mov ecx, 0          ; offset from start
-    mov edx, 2          ; Go to end of file
+    mov ecx, 0          
+    mov edx, 2          
     int 0x80
     
     cmp eax, 0
@@ -1145,17 +1132,16 @@ update_record:
         
         ; Check if read was successful
         cmp eax, 0
-        jl copy_error     ; If read failed
-        je  copy_done      ; If read 0 bytes, pointer reached EOF
+        jl copy_error    
+        je  copy_done     
         cmp eax, RECORD_SIZE
-        jne copy_error    ; If read different number of bytes, error
+        jne copy_error   
         
         ;  Check if this is the record to update
-        mov eax, [record_buffer]    ; Get ID from record
-        cmp eax, edi                ; Compare with ID to update
-        je update_which_record       ; Update this record
+        mov eax, [record_buffer]    
+        cmp eax, edi                
+        je update_which_record       
         
-        ; Write record to temp file (unchanged)
         mov eax, 4      ; sys_write
         mov ebx, [temp_file_handle]
         mov ecx, record_buffer
@@ -1189,7 +1175,7 @@ update_record:
         add edi, 9
         mov ecx, 55
         mov al, 0
-        rep stosb ; fill buffer with al, ecx times
+        rep stosb 
 
         mov ecx, [esp + 20]  ;ecx contains new description pointer
         mov edx, [esp + 16] ; edx contains description length

@@ -3,20 +3,11 @@ extern print_records
 extern repeat_menu
 
 section .data
-    ; Record structure: [ID(4)][Type(1)][Amount(4)][Description(55)]
-    RECORD_SIZE equ 64
-
-    income_str db "Income ", 0
-    expense_str db "Expense", 0
-    
     continue_prompt db 0xA, "Press any key to return to menu...", 0
     continue_prompt_len equ $ - continue_prompt - 1
         
 section .bss
     input resb 1
-    record_buffer resb RECORD_SIZE
-    amount_str resb 12      ; Buffer for converting amount to string
-    output_buffer resb 80   ; Buffer for formatted output line
 
 section .text
 view_records:
