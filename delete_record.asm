@@ -101,7 +101,7 @@ delete_confirmed:
     jmp delete_exit
 
 record_not_found_msg:
-    pop eax             ; Clean up the stack
+    pop eax             
     mov eax, 4          ; sys_write
     mov ebx, 1          ; stdout
     mov ecx, record_not_found
@@ -177,3 +177,4 @@ convert_error:
     pop ebx
 
     ret 
+
