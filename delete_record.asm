@@ -88,9 +88,9 @@ delete_record:
     jmp delete_exit
 
 delete_confirmed:
-    pop eax             ; Restore the ID
+    pop eax            
     call perform_delete
-    cmp eax, 0 ; 0 fail to delete / 1 delete successful
+    cmp eax, 0 
     je delete_error
 
     mov eax, 4          ; sys_write
@@ -143,13 +143,13 @@ convert_string_to_number:
     mov esi, input_buffer
     xor eax, eax        ; result
     xor ebx, ebx        ; current digit
-    mov ecx, 10         ; multiplier
+    mov ecx, 10         
 
 convert_loop:
     mov bl, [esi]
-    cmp bl, 0xA         ; newline
+    cmp bl, 0xA         
     je convert_done
-    cmp bl, 0           ; null terminator
+    cmp bl, 0           
     je convert_done
     cmp bl, '0'
     jl convert_error
@@ -175,4 +175,5 @@ convert_error:
     pop edx
     pop ecx
     pop ebx
+
     ret 
