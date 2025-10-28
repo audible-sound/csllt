@@ -175,7 +175,7 @@ edit_description:
     mov byte [ebx], 0   
     
     pop eax             ; Get ID from stack
-    mov ebx, 2          ; Field type: 2 = description
+    mov ebx, 2         
     mov ecx, desc_buffer ; Description pointer
     mov edx, edi        ; Description length
     call update_record
@@ -192,7 +192,7 @@ edit_description:
     jmp edit_exit
 
 record_not_found_msg:
-    pop eax             ; Clean up the stack
+    pop eax             
     mov eax, 4          ; sys_write
     mov ebx, 1          ; stdout
     mov ecx, record_not_found
@@ -220,7 +220,6 @@ edit_exit:
     call repeat_menu
 
 convert_string_to_number:
-    ; Convert string in input_buffer to number in eax
     push ebx
     push ecx
     push edx
@@ -269,7 +268,7 @@ string_to_cents:
     mov ecx, 0              ; string index
     mov esi, 0              ; decimal counter
     mov edi, 0              ; decimal flag
-    xor edx, edx            ; clear edx
+    xor edx, edx            
     jmp conv_loop_cents
 
 validate_amount:    
@@ -279,11 +278,11 @@ validate_amount:
     cmp eax, 10
     jg amount_too_long
     
-    ; Validate each character
+    
     mov ebx, amount_buffer ; pointer to input
     mov ecx, 0          ; Counter
-    mov esi, eax        ; Store length of input
-    dec esi             ; Exclude newline
+    mov esi, eax        
+    dec esi             
     mov dh, 0          ; Decimal counter
     mov dl, 0          ; found dot character flag
     mov ah, 0           ; digit counter
@@ -296,4 +295,5 @@ check_zero_amount:
     mov ecx, amount_zero
     mov edx, amount_zero_len
     int 0x80
+
     jmp edit_amount
